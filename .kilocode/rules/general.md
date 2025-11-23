@@ -42,6 +42,20 @@ These are defined in the [`bigHomes`](puzzle.js) and [`defaultGaps`](puzzle.js) 
   - Preview animates smoothly (150ms transition)
   - Works even if mouse leaves board area during swipe
   - For large pieces, checks all 4 cells for gap adjacency
+- **Drag on Piece**: Click and hold on a piece, then drag over adjacent gaps to move continuously
+  - Piece moves when mouse enters the valid drag region of an adjacent gap
+  - Valid region: 75% of gap area (excludes the edge closest to the piece)
+  - Gap divided into 4×4 grid: accepts 12 out of 16 squares (3×4 rectangle)
+  - Allows multiple moves in a single drag operation
+  - Disables swipe controls for the duration of the drag
+  - Works with both small (1×1) and large (2×2) pieces
+  - Updates piece position after each move to enable continued dragging
+- **Swipe on Gap**: Drag ≥5 pixels in a direction to swap with the other gap if adjacent
+  - Same swipe mechanics as pieces (5px threshold, preview, etc.)
+  - Only swaps if the other gap is adjacent in the swipe direction
+- **Drag on Gap**: Click and hold on a gap, then drag over the other gap to swap
+  - Swaps when mouse enters the other gap's area
+  - Allows continuous swapping during a single drag operation
 - **Left Click on Gap**: Select that gap (if no adjacent gap exists)
 
 #### Button Controls
@@ -157,6 +171,12 @@ challengeSolved      // Flag indicating if challenge is completed
 
 #### Movement Logic
 - [`tryMove(dir)`](puzzle.js): Main movement function
+  - **CRITICAL**: The `dir` parameter is counterintuitive - it specifies where to look for something to move INTO the gap, NOT the direction of movement
+    - `tryMove('right')` looks at `g.x - 1` (to the LEFT of the gap)
+    - `tryMove('left')` looks at `g.x + 1` (to the RIGHT of the gap)
+    - `tryMove('down')` looks at `g.y - 1` (ABOVE the gap)
+    - `tryMove('up')` looks at `g.y + 1` (BELOW the gap)
+  - **For gap swapping**: To swap with a gap that's to the RIGHT, call `tryMove('left')` (not `tryMove('right')`)
   - Calculates source cell and direction vector from selected gap
   - **Gap Swapping**: If adjacent cell is the other gap, swaps their positions
   - **Small Piece Moves**: Moves piece into gap, gap takes piece's former position
@@ -273,6 +293,7 @@ Gaps show darkened version (brightness 0.125) of their default positions, mainta
 3. Update DOM with [`renderAll()`](puzzle.js) or specific render functions
 4. Test with both small and large pieces
 5. Ensure gap identity is preserved (gaps remember their home crop)
+6. **IMPORTANT**: Remember that [`tryMove(dir)`](puzzle.js) direction is inverted - it looks in the OPPOSITE direction of where you want to move something. When implementing swipe/drag controls for gap swapping, always reverse the direction.
 
 ### When Adding Features
 - Keep the three-file structure (HTML/CSS/JS separation)

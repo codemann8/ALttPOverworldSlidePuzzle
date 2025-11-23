@@ -295,6 +295,16 @@
       return false;
     }
     
+    // IMPORTANT: The 'dir' parameter is COUNTERINTUITIVE!
+    // It specifies where to look for something to move INTO the gap, NOT the direction of movement.
+    // - tryMove('right') looks at g.x - 1 (to the LEFT)
+    // - tryMove('left') looks at g.x + 1 (to the RIGHT)
+    // - tryMove('down') looks at g.y - 1 (ABOVE)
+    // - tryMove('up') looks at g.y + 1 (BELOW)
+    //
+    // For gap swapping: To swap with a gap to the RIGHT, call tryMove('left')!
+    // When implementing swipe/drag controls, always REVERSE the direction.
+    
     // dir: 'up'|'down'|'left'|'right'
     const g = gaps[selectedGapIdx];
     let fromX = g.x, fromY = g.y, dx = 0, dy = 0;
@@ -592,13 +602,15 @@
     }
   });
 
-  // Mouse controls with swipe detection
+  // Mouse controls with swipe detection and drag controls
   let mouseDownPos = null;
   let mouseDownTime = null;
   let mouseDownGridPos = null;
   let swipePreviewActive = false;
   let swipePreviewTile = null;
   let swipePreviewOffset = { x: 0, y: 0 };
+  let lastDragGapPos = null; // Track last gap position we dragged over to prevent repeated moves
+  let dragControlUsed = false; // Flag to disable swipe controls after drag control is used
 
   boardEl.addEventListener('mousedown', (e) => {
     // Prevent mousedown if challenge is solved
@@ -624,6 +636,15 @@
     mouseDownPos = { x: e.clientX, y: e.clientY };
     mouseDownTime = Date.now();
     mouseDownGridPos = { x: gridX, y: gridY };
+    lastDragGapPos = null; // Reset drag tracking for new drag session
+    dragControlUsed = false; // Reset drag control flag for new drag session
+    
+    // Check if we clicked on a gap and select it
+    const clickedGapIdx = gaps.findIndex(g => g.x === gridX && g.y === gridY);
+    if (clickedGapIdx !== -1) {
+      selectedGapIdx = clickedGapIdx;
+      renderGaps();
+    }
   });
 
   boardEl.addEventListener('mousemove', (e) => {
@@ -637,16 +658,308 @@
       return;
     }
 
+    // Get current mouse position relative to board
+    const rect = boardEl.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+    
+    // Convert to grid coordinates
+    const currentGridX = Math.floor(currentX / tilePx);
+    const currentGridY = Math.floor(currentY / tilePx);
+    
+    // Check if we started on a gap
+    const startedOnGap = grid[mouseDownGridPos.y][mouseDownGridPos.x] === null;
+    
+    if (startedOnGap) {
+      // GAP DRAG CONTROL: Started on a gap, check if we're over a piece or the other gap
+      if (currentGridX >= 0 && currentGridX < SIZE && currentGridY >= 0 && currentGridY < SIZE) {
+        const currentCell = grid[currentGridY][currentGridX];
+        
+        // Check if we're over the other gap
+        const startGapIdx = gaps.findIndex(g => g.x === mouseDownGridPos.x && g.y === mouseDownGridPos.y);
+        if (startGapIdx === -1) return; // Safety check
+        const otherGapIdx = 1 - startGapIdx;
+        const otherGap = gaps[otherGapIdx];
+        
+        if (currentCell === null && otherGap && otherGap.x === currentGridX && otherGap.y === currentGridY) {
+          // We're over the other gap - check if it's adjacent
+          const dx = currentGridX - mouseDownGridPos.x;
+          const dy = currentGridY - mouseDownGridPos.y;
+          
+          if ((Math.abs(dx) === 1 && dy === 0) || (dx === 0 && Math.abs(dy) === 1)) {
+            // Other gap is adjacent - determine direction and swap
+            const gapPosKey = `${currentGridX},${currentGridY}`;
+            
+            if (lastDragGapPos !== gapPosKey) {
+              // tryMove direction is OPPOSITE of where the other gap is
+              let swapDir = null;
+              if (dx === 1 && dy === 0) swapDir = 'left';   // other gap is right, move from left
+              else if (dx === -1 && dy === 0) swapDir = 'right';  // other gap is left, move from right
+              else if (dx === 0 && dy === 1) swapDir = 'up';      // other gap is down, move from up
+              else if (dx === 0 && dy === -1) swapDir = 'down';   // other gap is up, move from down
+              
+              if (swapDir) {
+                const moveSuccess = tryMove(swapDir);
+                
+                if (moveSuccess) {
+                  dragControlUsed = true;
+                  lastDragGapPos = gapPosKey;
+                  // Clear any swipe preview
+                  if (swipePreviewActive && swipePreviewTile) {
+                    swipePreviewTile.el.style.transform = '';
+                    swipePreviewActive = false;
+                    swipePreviewTile = null;
+                    swipePreviewOffset = { x: 0, y: 0 };
+                  }
+                  // Update mouseDownGridPos to the new gap position after the swap
+                  mouseDownGridPos = { x: gaps[selectedGapIdx].x, y: gaps[selectedGapIdx].y };
+                }
+              }
+            }
+          }
+        } else if (currentCell !== null) {
+          // We're over a piece - check if it's in the valid drag region
+          // Valid region: anywhere on the piece EXCEPT the 4 squares closest to the gap
+          const cellX = currentX - (currentGridX * tilePx);
+          const cellY = currentY - (currentGridY * tilePx);
+          
+          const quarterTile = tilePx / 4;
+          let isInValidRegion = true;
+          
+          // Get the tile
+          const tile = tileById.get(currentCell.id);
+          if (tile) {
+            // Determine which cells to check for adjacency
+            let cellsToCheck = [{x: currentGridX, y: currentGridY}];
+            
+            if (currentCell.type === 'big') {
+              cellsToCheck = [
+                {x: tile.x, y: tile.y},
+                {x: tile.x + 1, y: tile.y},
+                {x: tile.x, y: tile.y + 1},
+                {x: tile.x + 1, y: tile.y + 1}
+              ];
+            }
+            
+            // Find the direction from gap to piece
+            for (const cell of cellsToCheck) {
+              const dx = cell.x - mouseDownGridPos.x;
+              const dy = cell.y - mouseDownGridPos.y;
+              
+              if ((Math.abs(dx) === 1 && dy === 0) || (dx === 0 && Math.abs(dy) === 1)) {
+                // Piece is adjacent - determine which edge to exclude (the edge CLOSEST to the gap)
+                if (dx === 1 && dy === 0) {
+                  // Piece is to the right of gap - exclude LEFT edge (closest to gap)
+                  if (cellX < quarterTile) isInValidRegion = false;
+                } else if (dx === -1 && dy === 0) {
+                  // Piece is to the left of gap - exclude RIGHT edge (closest to gap)
+                  if (cellX >= (3 * quarterTile)) isInValidRegion = false;
+                } else if (dx === 0 && dy === 1) {
+                  // Piece is below gap - exclude TOP edge (closest to gap)
+                  if (cellY < quarterTile) isInValidRegion = false;
+                } else if (dx === 0 && dy === -1) {
+                  // Piece is above gap - exclude BOTTOM edge (closest to gap)
+                  if (cellY >= (3 * quarterTile)) isInValidRegion = false;
+                }
+                break;
+              }
+            }
+          }
+          
+          if (isInValidRegion) {
+            // We're in the valid region of a piece
+            const piecePosKey = `${currentGridX},${currentGridY}`;
+            
+            // Only trigger move if this is a different piece than the last one we dragged over
+            if (lastDragGapPos !== piecePosKey) {
+              // Find direction from gap to piece
+              const tile2 = tileById.get(currentCell.id);
+              if (tile2) {
+                let cellsToCheck2 = [{x: currentGridX, y: currentGridY}];
+                if (currentCell.type === 'big') {
+                  cellsToCheck2 = [
+                    {x: tile2.x, y: tile2.y},
+                    {x: tile2.x + 1, y: tile2.y},
+                    {x: tile2.x, y: tile2.y + 1},
+                    {x: tile2.x + 1, y: tile2.y + 1}
+                  ];
+                }
+                
+                let adjacentDir = null;
+                for (const cell of cellsToCheck2) {
+                  const dx = cell.x - mouseDownGridPos.x;
+                  const dy = cell.y - mouseDownGridPos.y;
+                  
+                  if ((Math.abs(dx) === 1 && dy === 0) || (dx === 0 && Math.abs(dy) === 1)) {
+                    // Reverse the direction because we're pulling the piece toward the gap
+                    if (dx === 1 && dy === 0) adjacentDir = 'left';  // piece is right, pull it left
+                    else if (dx === -1 && dy === 0) adjacentDir = 'right';  // piece is left, pull it right
+                    else if (dx === 0 && dy === 1) adjacentDir = 'up';  // piece is below, pull it up
+                    else if (dx === 0 && dy === -1) adjacentDir = 'down';  // piece is above, pull it down
+                    break;
+                  }
+                }
+                
+                if (adjacentDir) {
+                  const moveSuccess = tryMove(adjacentDir);
+                  
+                  if (moveSuccess) {
+                    dragControlUsed = true;
+                    lastDragGapPos = piecePosKey;
+                    // Clear any swipe preview that might be active
+                    if (swipePreviewActive && swipePreviewTile) {
+                      swipePreviewTile.el.style.transform = '';
+                      swipePreviewActive = false;
+                      swipePreviewTile = null;
+                      swipePreviewOffset = { x: 0, y: 0 };
+                    }
+                    // Update mouseDownGridPos to the new gap position after the move
+                    mouseDownGridPos = { x: gaps[selectedGapIdx].x, y: gaps[selectedGapIdx].y };
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // PIECE DRAG CONTROL: Started on a piece
+      // Check if mouse is within board bounds
+      if (currentGridX >= 0 && currentGridX < SIZE && currentGridY >= 0 && currentGridY < SIZE) {
+        // Check if we're over a gap
+        const currentCell = grid[currentGridY][currentGridX];
+        
+        if (currentCell === null) {
+        // We're over a gap - check if it's in the valid drag region
+        // Valid region: anywhere on the gap EXCEPT the 4 squares closest to the piece
+        // Calculate position within the gap cell (0-63 pixels)
+        const cellX = currentX - (currentGridX * tilePx);
+        const cellY = currentY - (currentGridY * tilePx);
+        
+        // Divide gap into 4×4 grid (each square is tilePx/4 pixels, e.g., 16px for 64px tiles)
+        const quarterTile = tilePx / 4;
+        
+        // Determine which direction the piece is relative to this gap
+        // We'll check if we're in the edge closest to the piece (the 4 squares on that edge)
+        let isInValidRegion = true;
+        
+        // Check if the original clicked cell is adjacent to this gap
+        const clickedCell = grid[mouseDownGridPos.y][mouseDownGridPos.x];
+        if (clickedCell) {
+          const tile = tileById.get(clickedCell.id);
+          if (tile) {
+            // Determine which cells to check for adjacency
+            let cellsToCheck = [{x: mouseDownGridPos.x, y: mouseDownGridPos.y}];
+            
+            if (clickedCell.type === 'big') {
+              cellsToCheck = [
+                {x: tile.x, y: tile.y},
+                {x: tile.x + 1, y: tile.y},
+                {x: tile.x, y: tile.y + 1},
+                {x: tile.x + 1, y: tile.y + 1}
+              ];
+            }
+            
+            // Find the direction from piece to gap
+            for (const cell of cellsToCheck) {
+              const dx = currentGridX - cell.x;
+              const dy = currentGridY - cell.y;
+              
+              if ((Math.abs(dx) === 1 && dy === 0) || (dx === 0 && Math.abs(dy) === 1)) {
+                // Gap is adjacent - determine which edge to exclude
+                if (dx === 1 && dy === 0) {
+                  // Gap is to the right of piece - exclude left edge (first column of 4×4)
+                  if (cellX < quarterTile) isInValidRegion = false;
+                } else if (dx === -1 && dy === 0) {
+                  // Gap is to the left of piece - exclude right edge (last column of 4×4)
+                  if (cellX >= (3 * quarterTile)) isInValidRegion = false;
+                } else if (dx === 0 && dy === 1) {
+                  // Gap is below piece - exclude top edge (first row of 4×4)
+                  if (cellY < quarterTile) isInValidRegion = false;
+                } else if (dx === 0 && dy === -1) {
+                  // Gap is above piece - exclude bottom edge (last row of 4×4)
+                  if (cellY >= (3 * quarterTile)) isInValidRegion = false;
+                }
+                break;
+              }
+            }
+          }
+        }
+        
+        if (isInValidRegion) {
+          // We're in the center region of a gap
+          const gapPosKey = `${currentGridX},${currentGridY}`;
+          
+          // Only trigger move if this is a different gap than the last one we dragged over
+          if (lastDragGapPos !== gapPosKey) {
+            // We already checked adjacency above, now just get the direction and move
+            const clickedCell2 = grid[mouseDownGridPos.y][mouseDownGridPos.x];
+            if (clickedCell2) {
+              const tile2 = tileById.get(clickedCell2.id);
+              if (tile2) {
+                let cellsToCheck2 = [{x: mouseDownGridPos.x, y: mouseDownGridPos.y}];
+                if (clickedCell2.type === 'big') {
+                  cellsToCheck2 = [
+                    {x: tile2.x, y: tile2.y},
+                    {x: tile2.x + 1, y: tile2.y},
+                    {x: tile2.x, y: tile2.y + 1},
+                    {x: tile2.x + 1, y: tile2.y + 1}
+                  ];
+                }
+                
+                let adjacentDir = null;
+                for (const cell of cellsToCheck2) {
+                  const dx = currentGridX - cell.x;
+                  const dy = currentGridY - cell.y;
+                  
+                  if ((Math.abs(dx) === 1 && dy === 0) || (dx === 0 && Math.abs(dy) === 1)) {
+                    if (dx === 1 && dy === 0) adjacentDir = 'right';
+                    else if (dx === -1 && dy === 0) adjacentDir = 'left';
+                    else if (dx === 0 && dy === 1) adjacentDir = 'down';
+                    else if (dx === 0 && dy === -1) adjacentDir = 'up';
+                    break;
+                  }
+                }
+                
+                if (adjacentDir) {
+                  const gapIdx = gaps.findIndex(g => g.x === currentGridX && g.y === currentGridY);
+                  if (gapIdx !== -1) {
+                    selectedGapIdx = gapIdx;
+                    const moveSuccess = tryMove(adjacentDir);
+                    
+                    if (moveSuccess) {
+                      dragControlUsed = true;
+                      lastDragGapPos = gapPosKey;
+                      if (swipePreviewActive && swipePreviewTile) {
+                        swipePreviewTile.el.style.transform = '';
+                        swipePreviewActive = false;
+                        swipePreviewTile = null;
+                        swipePreviewOffset = { x: 0, y: 0 };
+                      }
+                      mouseDownGridPos = { x: currentGridX, y: currentGridY };
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        }
+      }
+    }
+
     // Calculate swipe distance and direction
     const swipeDx = e.clientX - mouseDownPos.x;
     const swipeDy = e.clientY - mouseDownPos.y;
     const swipeDistance = Math.sqrt(swipeDx * swipeDx + swipeDy * swipeDy);
 
-    // Swipe detection threshold: 5 pixels minimum distance
-    const SWIPE_THRESHOLD = 5;
-    let swipeDir = null;
+    // Only process swipe controls if drag control hasn't been used
+    if (!dragControlUsed) {
+      // Swipe detection threshold: 5 pixels minimum distance
+      const SWIPE_THRESHOLD = 5;
+      let swipeDir = null;
 
-    if (swipeDistance >= SWIPE_THRESHOLD) {
+      if (swipeDistance >= SWIPE_THRESHOLD) {
       // Determine swipe direction based on dominant axis
       if (Math.abs(swipeDx) > Math.abs(swipeDy)) {
         // Horizontal swipe
@@ -662,7 +975,65 @@
       const clickedCell = grid[gridY][gridX];
 
       if (!clickedCell) {
-        // Clicked on a gap, no preview
+        // Clicked on a gap - check if there's an adjacent piece or the other gap in the swipe direction
+        let targetX = gridX, targetY = gridY;
+        if (swipeDir === 'right') targetX++;
+        else if (swipeDir === 'left') targetX--;
+        else if (swipeDir === 'down') targetY++;
+        else if (swipeDir === 'up') targetY--;
+        
+        if (targetX >= 0 && targetX < SIZE && targetY >= 0 && targetY < SIZE) {
+          const targetCell = grid[targetY][targetX];
+          
+          // Check if target is the other gap
+          const clickedGapIdx = gaps.findIndex(g => g.x === gridX && g.y === gridY);
+          const otherGapIdx = 1 - clickedGapIdx;
+          const otherGap = gaps[otherGapIdx];
+          const isOtherGap = (targetCell === null && otherGap && otherGap.x === targetX && otherGap.y === targetY);
+          
+          if (isOtherGap) {
+            // Target is the other gap - no visual preview needed for gap swaps
+            // Just clear any existing preview
+            if (swipePreviewActive && swipePreviewTile) {
+              swipePreviewTile.el.style.transform = '';
+              swipePreviewActive = false;
+              swipePreviewTile = null;
+              swipePreviewOffset = { x: 0, y: 0 };
+            }
+          } else if (targetCell) {
+            // There's a piece in the swipe direction
+            const tile = tileById.get(targetCell.id);
+            if (tile) {
+              // Clear any existing preview on a different tile
+              if (swipePreviewActive && swipePreviewTile && swipePreviewTile !== tile) {
+                swipePreviewTile.el.style.transform = '';
+              }
+              
+              // Show preview for the piece moving into the gap
+              const previewOffset = 15;
+              let offsetX = 0, offsetY = 0;
+              
+              // Reverse the direction for the piece (it moves opposite to swipe)
+              if (swipeDir === 'right') offsetX = -previewOffset;
+              if (swipeDir === 'left') offsetX = previewOffset;
+              if (swipeDir === 'down') offsetY = -previewOffset;
+              if (swipeDir === 'up') offsetY = previewOffset;
+              
+              swipePreviewActive = true;
+              swipePreviewTile = tile;
+              swipePreviewOffset = { x: offsetX, y: offsetY };
+              tile.el.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+            }
+          } else {
+            // No piece or gap in swipe direction, clear preview
+            if (swipePreviewActive && swipePreviewTile) {
+              swipePreviewTile.el.style.transform = '';
+              swipePreviewActive = false;
+              swipePreviewTile = null;
+              swipePreviewOffset = { x: 0, y: 0 };
+            }
+          }
+        }
         return;
       }
 
@@ -745,6 +1116,7 @@
         swipePreviewOffset = { x: 0, y: 0 };
       }
     }
+    }
   });
 
   document.addEventListener('mouseup', (e) => {
@@ -753,6 +1125,8 @@
       mouseDownPos = null;
       mouseDownTime = null;
       mouseDownGridPos = null;
+      lastDragGapPos = null;
+      dragControlUsed = false;
       return;
     }
 
@@ -761,15 +1135,35 @@
       return;
     }
 
+    // Clear swipe preview
+    if (swipePreviewActive && swipePreviewTile) {
+      swipePreviewTile.el.style.transform = '';
+      swipePreviewActive = false;
+      swipePreviewTile = null;
+      swipePreviewOffset = { x: 0, y: 0 };
+    }
+
+    // If drag control was used, skip all click/swipe logic
+    if (dragControlUsed) {
+      // Reset mouse tracking
+      mouseDownPos = null;
+      mouseDownTime = null;
+      mouseDownGridPos = null;
+      lastDragGapPos = null;
+      dragControlUsed = false;
+      return;
+    }
+
+    // Only process swipe/click logic if drag control wasn't used
+    let swipeDir = null;
+    
     // Calculate swipe distance and direction
     const swipeDx = e.clientX - mouseDownPos.x;
     const swipeDy = e.clientY - mouseDownPos.y;
     const swipeDistance = Math.sqrt(swipeDx * swipeDx + swipeDy * swipeDy);
-    const swipeTime = Date.now() - mouseDownTime;
 
     // Swipe detection threshold: 5 pixels minimum distance
     const SWIPE_THRESHOLD = 5;
-    let swipeDir = null;
 
     if (swipeDistance >= SWIPE_THRESHOLD) {
       // Determine swipe direction based on dominant axis
@@ -782,14 +1176,6 @@
       }
     }
 
-    // Clear swipe preview
-    if (swipePreviewActive && swipePreviewTile) {
-      swipePreviewTile.el.style.transform = '';
-      swipePreviewActive = false;
-      swipePreviewTile = null;
-      swipePreviewOffset = { x: 0, y: 0 };
-    }
-
     // Use the original grid position from mousedown for determining the clicked cell
     const gridX = mouseDownGridPos.x;
     const gridY = mouseDownGridPos.y;
@@ -798,22 +1184,60 @@
     mouseDownPos = null;
     mouseDownTime = null;
     mouseDownGridPos = null;
+    lastDragGapPos = null;
+    dragControlUsed = false;
 
     // Check if clicked on a gap
     const clickedGapIdx = gaps.findIndex(g => g.x === gridX && g.y === gridY);
     if (clickedGapIdx !== -1) {
-      // Check if the other gap is adjacent
+      // Clicked on a gap
+      selectedGapIdx = clickedGapIdx;
+      
+      if (swipeDir) {
+        // Check if the other gap is adjacent in the swipe direction
+        const otherGapIdx = 1 - clickedGapIdx;
+        const otherGap = gaps[otherGapIdx];
+        const dx = otherGap.x - gridX;
+        const dy = otherGap.y - gridY;
+        
+        // Check if other gap is adjacent and in swipe direction
+        // tryMove direction is OPPOSITE of where the gap is (it's the direction things move INTO the gap)
+        let gapSwapDir = null;
+        if (swipeDir === 'right' && dx === 1 && dy === 0) gapSwapDir = 'left';   // other gap is right, so move from left
+        if (swipeDir === 'left' && dx === -1 && dy === 0) gapSwapDir = 'right';  // other gap is left, so move from right
+        if (swipeDir === 'down' && dx === 0 && dy === 1) gapSwapDir = 'up';      // other gap is down, so move from up
+        if (swipeDir === 'up' && dx === 0 && dy === -1) gapSwapDir = 'down';     // other gap is up, so move from down
+        
+        if (gapSwapDir) {
+          // Swap gaps
+          tryMove(gapSwapDir);
+          return;
+        } else {
+          // Swipe on gap - move adjacent piece in the OPPOSITE direction into the gap
+          // (we're pulling the piece toward us, not pushing the gap away)
+          const reverseDir = {
+            'up': 'down',
+            'down': 'up',
+            'left': 'right',
+            'right': 'left'
+          };
+          tryMove(reverseDir[swipeDir]);
+          return;
+        }
+      }
+      
+      // Check if the other gap is adjacent (for click behavior)
       const otherGapIdx = 1 - clickedGapIdx;
       const otherGap = gaps[otherGapIdx];
       const dx = Math.abs(otherGap.x - gridX);
       const dy = Math.abs(otherGap.y - gridY);
       
       if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) {
-        // Adjacent gap exists, don't change selection (let piece move handle it)
-        // Do nothing here, fall through to piece movement logic below
+        // Adjacent gap exists - just select this gap, don't fall through
+        renderGaps();
+        return;
       } else {
-        // No adjacent gap, select this gap
-        selectedGapIdx = clickedGapIdx;
+        // No adjacent gap, just select this gap (already done above)
         renderGaps();
         return;
       }

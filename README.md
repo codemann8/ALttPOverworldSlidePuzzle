@@ -18,7 +18,8 @@ A browser-based slide puzzle game featuring an 8×8 grid with mixed-size pieces 
 
 ### Mouse
 - **Click on Piece**: Move it into an adjacent gap (uses selected gap if both adjacent)
-- **Swipe on Piece**: Drag in a direction to move piece that way
+- **Swipe on Piece**: Drag in a direction to move piece that way (also works with gaps)
+- **Drag on Piece**: Hold and drag over adjacent gaps to move continuously (works similarly with gaps)
 - **Click on Gap**: Select that gap
 
 ### Buttons
