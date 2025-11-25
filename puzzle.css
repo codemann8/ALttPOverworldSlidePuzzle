@@ -136,7 +136,7 @@ body { font-family: system-ui, Arial, sans-serif; margin: 20px; color: #222; }
   background-size: calc(8 * var(--tile)) calc(8 * var(--tile));
   background-repeat: no-repeat;
   /* darkened so gaps are distinct, but still show the image crop from their default positions */
-  filter: brightness(0.25);
+  filter: brightness(0.5);
   box-sizing: border-box;
   border-radius: 0;
   /* thin black outline to match tiles */

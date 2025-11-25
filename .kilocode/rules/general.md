@@ -349,7 +349,7 @@ Each piece shows its "home" portion of the image:
 ```javascript
 backgroundPosition: `-${homeX*tilePx}px -${homeY*tilePx}px`
 ```
-Gaps show darkened version (brightness 0.125) of their default positions, maintaining their identity even when moved.
+Gaps show darkened version (brightness 0.5) of their default positions, maintaining their identity even when moved.
 
 ## Development Guidelines
 
