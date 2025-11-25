@@ -18,6 +18,7 @@
   const congratsDialog = document.getElementById('congratsDialog');
   const congratsMessage = document.getElementById('congratsMessage');
   const congratsOkBtn = document.getElementById('congratsOkBtn');
+  const themeToggleBtn = document.getElementById('themeToggleBtn');
   const helpBtn = document.getElementById('helpBtn');
   const helpDialog = document.getElementById('helpDialog');
   const helpCloseBtn = document.getElementById('helpCloseBtn');
@@ -1495,6 +1496,18 @@
       congratsOkBtn.click();
     }
   });
+
+  // Theme toggle handler
+  themeToggleBtn.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    const isDarkMode = document.body.classList.contains('dark-mode');
+    localStorage.setItem('darkMode', isDarkMode ? 'enabled' : 'disabled');
+  });
+
+  // Load saved theme preference
+  if (localStorage.getItem('darkMode') === 'enabled') {
+    document.body.classList.add('dark-mode');
+  }
 
   // Help dialog handlers
   helpBtn.addEventListener('click', () => {

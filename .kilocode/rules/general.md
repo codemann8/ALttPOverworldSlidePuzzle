@@ -99,8 +99,9 @@ The toolbar uses flexbox layout with two groups:
   - Give Up button (shown only in Challenge Mode)
 - **`.toolbar-right`**: Right-aligned button group containing:
   - Help button (?) - Opens controls reference dialog
+  - Theme toggle button (💡) - Toggles dark mode theme
   
-This structure ensures the help button stays right-aligned with the puzzle width rather than extending to the window edge.
+This structure ensures the right buttons stay aligned with the puzzle width rather than extending to the window edge.
 
 ### Game Modes
 
@@ -508,6 +509,23 @@ Challenge Mode includes automatic win detection:
 - Mouse and keyboard controls supported
 - Touch events: Mouse click events work on touch devices
 - Uses `will-change` CSS property for performance
+
+## Dark Mode
+
+The game includes a dark mode theme that can be toggled by clicking the lightbulb icon (💡) in the toolbar:
+
+- **Theme Toggle Button**: Lightbulb icon (💡) in right toolbar group
+- **Persistence**: Theme preference saved to localStorage and restored on page load
+- **Implementation**: Adds/removes `dark-mode` class on body element
+- **Styling**: Dark mode styles defined in [`puzzle.css`](puzzle.css)
+  - Background: #1a1a1a (dark)
+  - Text: #e0e0e0 (light)
+  - Buttons: #2a2a2a background with #555 borders
+  - Challenge info: Translucent blue background maintained
+  - Dialogs: #2a2a2a background with adjusted colors
+  - Form inputs: Dark backgrounds with light text
+  - Primary buttons: Adjusted blue tones for dark mode
+  - All UI elements styled for consistency in dark mode
 
 ## Dialogs
 
