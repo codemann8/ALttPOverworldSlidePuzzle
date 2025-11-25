@@ -9,6 +9,7 @@
   const challengeDialog = document.getElementById('challengeDialog');
   const challengeStartBtn = document.getElementById('challengeStartBtn');
   const challengeCancelBtn = document.getElementById('challengeCancelBtn');
+  const dailyChallengeBtn = document.getElementById('dailyChallengeBtn');
   const seedInput = document.getElementById('seedInput');
   const stepsInput = document.getElementById('stepsInput');
   const challengeInfo = document.getElementById('challengeInfo');
@@ -1445,6 +1446,16 @@
   challengeCancelBtn.addEventListener('click', () => {
     challengeDialog.style.display = 'none';
     boardEl.focus();
+  });
+
+  // Daily Challenge button handler
+  dailyChallengeBtn.addEventListener('click', () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const dailySeed = `${year}${month}${day}`;
+    seedInput.value = dailySeed;
   });
 
   challengeStartBtn.addEventListener('click', async () => {

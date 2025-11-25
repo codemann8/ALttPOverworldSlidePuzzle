@@ -599,6 +599,9 @@ All dialogs support the following dismissal methods:
 - Opened by "New Challenge" button
 - Contains:
   - Seed input field (type="number", optional, min=0)
+    - "Daily Challenge" button next to seed input
+    - Clicking "Daily Challenge" populates seed with today's date in YYYYMMDD format (e.g., 20251125)
+    - Enables sharing daily challenges with consistent seeds across all players
   - Steps input field (type="number", default 250, min=1, max=10000)
   - Difficulty preset buttons: Easy (50), Normal (250), Hard (1000), Very Hard (10000)
   - Start Challenge button

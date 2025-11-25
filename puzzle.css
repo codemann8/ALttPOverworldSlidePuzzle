@@ -318,6 +318,23 @@ body { font-family: system-ui, Arial, sans-serif; margin: 20px; color: #222; }
   font-family: inherit;
 }
 
+.seed-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.seed-input-group input {
+  flex: 1;
+  min-width: 0;
+}
+
+.seed-input-group .btn-primary {
+  white-space: nowrap;
+  padding: 8px 12px;
+  align-self: stretch;
+}
+
 .form-group input:focus {
   outline: none;
   border-color: rgb(100, 200, 255);

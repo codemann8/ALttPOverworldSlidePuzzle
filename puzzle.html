@@ -81,7 +81,10 @@
       <div class="dialog-content">
         <div class="form-group">
           <label for="seedInput">Seed (leave empty for random):</label>
-          <input type="number" id="seedInput" placeholder="Enter a number" min="0" />
+          <div class="seed-input-group">
+            <input type="number" id="seedInput" placeholder="Enter a number" min="0" />
+            <button type="button" id="dailyChallengeBtn" class="btn btn-primary">Daily Challenge</button>
+          </div>
         </div>
         <div class="form-group">
           <label for="stepsInput">Number of shuffling steps (difficulty):</label>
